@@ -3,6 +3,7 @@ package agollo
 import (
 	"strconv"
 	"github.com/coocood/freecache"
+	"sync"
 )
 
 const (
@@ -15,10 +16,13 @@ const (
 	configCacheExpireTime=120
 )
 var (
-	currentConnApolloConfig = &ApolloConnConfig{}
+	apolloConfigConnMap sync.Map
+	//currentConnApolloConfig = &ApolloConnConfig{}
 
 	//config from apollo
-	apolloConfigCache = freecache.NewCache(apolloConfigCacheSize)
+	apolloConfigCacheMap sync.Map
+	cacheLock sync.Mutex
+	//apolloConfigCache = freecache.NewCache(apolloConfigCacheSize)
 )
 
 func updateApolloConfig(apolloConfig *ApolloConfig) {
@@ -26,8 +30,11 @@ func updateApolloConfig(apolloConfig *ApolloConfig) {
 		logger.Error("apolloConfig is null,can't update!")
 		return
 	}
+
+	apolloConfigConnMap.Store(apolloConfig.NamespaceName, &apolloConfig.ApolloConnConfig)
+
 	//get change list
-	changeList := updateApolloConfigCache(apolloConfig.Configurations, configCacheExpireTime)
+	changeList := updateApolloConfigCache(apolloConfig.Configurations, configCacheExpireTime,apolloConfig.NamespaceName)
 
 	if len(changeList) > 0 {
 		//create config change event base on change list
@@ -38,13 +45,11 @@ func updateApolloConfig(apolloConfig *ApolloConfig) {
 	}
 
 	//update apollo connection config
-
-	currentConnApolloConfig.Lock()
-	defer currentConnApolloConfig.Unlock()
-	currentConnApolloConfig=&apolloConfig.ApolloConnConfig
 }
 
-func updateApolloConfigCache(configurations map[string]string,expireTime int) map[string]*ConfigChange {
+func updateApolloConfigCache(configurations map[string]string,expireTime int,namespace string ) map[string]*ConfigChange {
+	apolloConfigCache:=GetApolloConfigCache(namespace)
+
 	if (configurations==nil||len(configurations)==0)&& apolloConfigCache.EntryCount() == 0 {
 		return nil
 	}
@@ -99,12 +104,13 @@ func createConfigChangeEvent(changes map[string]*ConfigChange,nameSpace string) 
 	}
 }
 
-func touchApolloConfigCache() error{
-	updateApolloConfigCacheTime(configCacheExpireTime)
+func touchApolloConfigCache(namespace string) error{
+	updateApolloConfigCacheTime(configCacheExpireTime,namespace)
 	return nil
 }
 
-func updateApolloConfigCacheTime(expireTime int)  {
+func updateApolloConfigCacheTime(expireTime int, namespace string)  {
+	apolloConfigCache:=GetApolloConfigCache(namespace)
 	it := apolloConfigCache.NewIterator()
 	for i := int64(0); i < apolloConfigCache.EntryCount(); i++ {
 		entry := it.Next()
@@ -115,17 +121,37 @@ func updateApolloConfigCacheTime(expireTime int)  {
 	}
 }
 
-func GetApolloConfigCache() *freecache.Cache {
-	return apolloConfigCache
+func GetApolloConfigCache(namespace string) *freecache.Cache {
+	v,ok:=apolloConfigCacheMap.Load(namespace)
+	if !ok {
+		cacheLock.Lock()
+		defer cacheLock.Unlock()
+
+		v,ok =apolloConfigCacheMap.Load(namespace)
+		if !ok {
+			cache := freecache.NewCache(apolloConfigCacheSize)
+			apolloConfigCacheMap.Store(namespace, cache)
+			v,ok =apolloConfigCacheMap.Load(namespace)
+		}
+	}
+
+	cache, _ := v.(*freecache.Cache)
+	return cache
 }
 
-func GetCurrentApolloConfig()*ApolloConnConfig  {
-	currentConnApolloConfig.RLock()
-	defer currentConnApolloConfig.RUnlock()
-	return currentConnApolloConfig
+func GetCurrentApolloConfig(namespace string) *ApolloConnConfig {
+	v, ok := apolloConfigConnMap.Load(namespace)
+
+	if !ok {
+		return nil
+	}
+
+	config, _ := v.(*ApolloConnConfig)
+	return config
 }
 
-func getConfigValue(key string) interface{}  {
+func getConfigValue(key string, namespace string) interface{}  {
+	apolloConfigCache:= GetApolloConfigCache(namespace)
 	value,err:=apolloConfigCache.Get([]byte(key))
 	if err!=nil{
 		logger.Error("get config value fail!err:",err)
@@ -136,8 +162,8 @@ func getConfigValue(key string) interface{}  {
 }
 
 
-func getValue(key string)string{
-	value:=getConfigValue(key)
+func getValue(key string, namespace string)string{
+	value:=getConfigValue(key, namespace)
 	if value==nil{
 		return empty
 	}
@@ -146,7 +172,7 @@ func getValue(key string)string{
 }
 
 func GetStringValue(key string,defaultValue string)string{
-	value:=getValue(key)
+	value:=getValue(key, default_namespace)
 	if value==empty{
 		return defaultValue
 	}
@@ -155,7 +181,7 @@ func GetStringValue(key string,defaultValue string)string{
 }
 
 func GetIntValue(key string,defaultValue int) int {
-	value :=getValue(key)
+	value :=getValue(key, default_namespace)
 
 	i,err:=strconv.Atoi(value)
 	if err!=nil{
@@ -167,7 +193,7 @@ func GetIntValue(key string,defaultValue int) int {
 }
 
 func GetFloatValue(key string,defaultValue float64) float64 {
-	value :=getValue(key)
+	value :=getValue(key,default_namespace)
 
 	i,err:=strconv.ParseFloat(value,64)
 	if err!=nil{
@@ -179,7 +205,52 @@ func GetFloatValue(key string,defaultValue float64) float64 {
 }
 
 func GetBoolValue(key string,defaultValue bool) bool {
-	value :=getValue(key)
+	value :=getValue(key,default_namespace )
+
+	b,err:=strconv.ParseBool(value)
+	if err!=nil{
+		logger.Debug("convert to bool fail!error:",err)
+		return defaultValue
+	}
+
+	return b
+}
+
+func GetStringValueWithNameSpace(key string,defaultValue string, namespace string)string{
+	value:=getValue(key, namespace)
+	if value==empty{
+		return defaultValue
+	}
+
+	return value
+}
+
+func GetIntValueWithNameSpace(key string,defaultValue int, namespace string) int {
+	value :=getValue(key, namespace)
+
+	i,err:=strconv.Atoi(value)
+	if err!=nil{
+		logger.Debug("convert to int fail!error:",err)
+		return defaultValue
+	}
+
+	return i
+}
+
+func GetFloatValueWithNameSpace(key string,defaultValue float64, namespace string) float64 {
+	value :=getValue(key,namespace)
+
+	i,err:=strconv.ParseFloat(value,64)
+	if err!=nil{
+		logger.Debug("convert to float fail!error:",err)
+		return defaultValue
+	}
+
+	return i
+}
+
+func GetBoolValueWithNameSpace(key string,defaultValue bool, namespace string) bool {
+	value :=getValue(key,namespace)
 
 	b,err:=strconv.ParseBool(value)
 	if err!=nil{

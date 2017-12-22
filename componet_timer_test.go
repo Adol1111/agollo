@@ -27,7 +27,7 @@ func TestAutoSyncConfigServices(t *testing.T) {
 
 	test.Nil(t,err)
 
-	config:=GetCurrentApolloConfig()
+	config:=GetCurrentApolloConfig(default_namespace)
 
 	test.Equal(t,"100004458",config.AppId)
 	test.Equal(t,"default",config.Cluster)
@@ -54,7 +54,7 @@ func TestAutoSyncConfigServicesNotModify(t *testing.T) {
 
 	test.Nil(t,err)
 
-	config:=GetCurrentApolloConfig()
+	config:=GetCurrentApolloConfig(default_namespace)
 
 	test.Equal(t,"100004458",config.AppId)
 	test.Equal(t,"default",config.Cluster)
@@ -81,7 +81,7 @@ func TestAutoSyncConfigServicesError(t *testing.T) {
 
 	test.NotNil(t,err)
 
-	config:=GetCurrentApolloConfig()
+	config:=GetCurrentApolloConfig(default_namespace)
 
 	//still properties config
 	test.Equal(t,"test",config.AppId)

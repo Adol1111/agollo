@@ -109,7 +109,9 @@ func init()  {
 	}
 	appConfig:=GetAppConfig()
 
-	allNotifications.setNotify(appConfig.NamespaceName,default_notification_id)
+	for _, namespace := range appConfig.NamespaceNames {
+		allNotifications.setNotify(namespace, default_notification_id)
+	}
 }
 
 type notification struct {

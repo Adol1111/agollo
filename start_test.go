@@ -12,6 +12,6 @@ func TestStart(t *testing.T) {
 
 	Start()
 
-	value := getValue("key1")
+	value := getValue("key1",default_namespace)
 	test.Equal(t,"value1",value)
 }

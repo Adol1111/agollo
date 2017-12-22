@@ -17,7 +17,7 @@ func TestInit(t *testing.T) {
 	test.Equal(t,"application",config.NamespaceName)
 	test.Equal(t,"localhost:8888",config.Ip)
 
-	apolloConfig:=GetCurrentApolloConfig()
+	apolloConfig:=GetCurrentApolloConfig(default_namespace)
 	test.Equal(t,"test",apolloConfig.AppId)
 	test.Equal(t,"dev",apolloConfig.Cluster)
 	test.Equal(t,"application",apolloConfig.NamespaceName)
@@ -41,13 +41,13 @@ func TestInitRefreshInterval_1(t *testing.T) {
 
 func TestGetConfigUrl(t *testing.T) {
 	appConfig:=getTestAppConfig()
-	url:=getConfigUrl(appConfig)
+	url:=getConfigUrl(appConfig, default_namespace)
 	test.StartWith(t,"http://localhost:8888/configs/test/dev/application?releaseKey=&ip=",url)
 }
 
 func TestGetConfigUrlByHost(t *testing.T) {
 	appConfig:=getTestAppConfig()
-	url:=getConfigUrlByHost(appConfig,"http://baidu.com/")
+	url:=getConfigUrlByHost(appConfig,"http://baidu.com/", default_namespace)
 	test.StartWith(t,"http://baidu.com/configs/test/dev/application?releaseKey=&ip=",url)
 }
 

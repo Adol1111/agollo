@@ -47,6 +47,7 @@ type AppConfig struct {
 	AppId string `json:"appId"`
 	Cluster string `json:"cluster"`
 	NamespaceName string `json:"namespaceName"`
+	NamespaceNames []string `json:"namespaceNames"`
 	Ip string `json:"ip"`
 	NextTryConnTime int64 `json:"-"`
 }
@@ -135,13 +136,21 @@ func initConfig() {
 		panic(err)
 	}
 
-	go func(appConfig *AppConfig) {
-		apolloConfig:=&ApolloConfig{}
-		apolloConfig.AppId=appConfig.AppId
-		apolloConfig.Cluster=appConfig.Cluster
-		apolloConfig.NamespaceName=appConfig.NamespaceName
+	if appConfig.NamespaceNames == nil || len(appConfig.NamespaceNames) == 0{
+		appConfig.NamespaceNames = []string{
+			appConfig.NamespaceName,
+		}
+	}
 
-		updateApolloConfig(apolloConfig)
+	go func(appConfig *AppConfig) {
+		for _,namespace:=range appConfig.NamespaceNames  {
+			apolloConfig := &ApolloConfig{}
+			apolloConfig.AppId = appConfig.AppId
+			apolloConfig.Cluster = appConfig.Cluster
+			apolloConfig.NamespaceName = namespace
+
+			updateApolloConfig(apolloConfig)
+		}
 	}(appConfig)
 }
 
@@ -203,7 +212,7 @@ func syncServerIpList() error{
 	return err
 }
 
-func GetAppConfig()*AppConfig  {
+func GetAppConfig() *AppConfig {
 	return appConfig
 }
 
@@ -220,27 +229,27 @@ func initRefreshInterval() error {
 	return nil
 }
 
-func getConfigUrl(config *AppConfig) string{
-	return getConfigUrlByHost(config,config.getHost())
+func getConfigUrl(config *AppConfig,namespace string) string{
+	return getConfigUrlByHost(config,config.getHost(),namespace)
 }
 
-func getConfigUrlByHost(config *AppConfig,host string) string{
-	current:=GetCurrentApolloConfig()
+func getConfigUrlByHost(config *AppConfig,host string,namespace string) string{
+	current:=GetCurrentApolloConfig(namespace)
 	return fmt.Sprintf("%sconfigs/%s/%s/%s?releaseKey=%s&ip=%s",
 		host,
 		url.QueryEscape(config.AppId),
 		url.QueryEscape(config.Cluster),
-		url.QueryEscape(config.NamespaceName),
+		url.QueryEscape(namespace),
 		url.QueryEscape(current.ReleaseKey),
 		getInternal())
 }
 
-func getConfigUrlSuffix(config *AppConfig) string{
-	current:=GetCurrentApolloConfig()
+func getConfigUrlSuffix(config *AppConfig,namespace string) string{
+	current:=GetCurrentApolloConfig(namespace)
 	return fmt.Sprintf("configs/%s/%s/%s?releaseKey=%s&ip=%s",
 		url.QueryEscape(config.AppId),
 		url.QueryEscape(config.Cluster),
-		url.QueryEscape(config.NamespaceName),
+		url.QueryEscape(namespace),
 		url.QueryEscape(current.ReleaseKey),
 		getInternal())
 }

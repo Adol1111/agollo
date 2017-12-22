@@ -38,19 +38,31 @@ func autoSyncConfigServicesSuccessCallBack(responseBody []byte)(o interface{},er
 }
 
 func autoSyncConfigServices() error {
-	appConfig:=GetAppConfig()
-	if appConfig==nil{
+	appConfig := GetAppConfig()
+	if appConfig == nil {
 		panic("can not find apollo config!please confirm!")
 	}
 
-	urlSuffix:=getConfigUrlSuffix(appConfig)
+	for _, namespace := range appConfig.NamespaceNames {
+		urlSuffix := getConfigUrlSuffix(appConfig, namespace)
 
-	_,err:=requestRecovery(appConfig,&ConnectConfig{
-		Uri:urlSuffix,
-	},&CallBack{
-		SuccessCallBack:autoSyncConfigServicesSuccessCallBack,
-		NotModifyCallBack:touchApolloConfigCache,
-	})
+		_, err := requestRecovery(appConfig, &ConnectConfig{
+			Uri: urlSuffix,
+		}, &CallBack{
+			SuccessCallBack:   autoSyncConfigServicesSuccessCallBack,
+			NotModifyCallBack: warpTouchApolloConfigCache(namespace),
+		})
 
-	return err
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+func warpTouchApolloConfigCache(namespace string) func() error {
+	return func() error {
+		return touchApolloConfigCache(namespace)
+	}
 }
